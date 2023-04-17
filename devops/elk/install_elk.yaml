@@ -1,0 +1,37 @@
+---
+- hosts: localhost
+  gather_facts: false
+  tasks: 
+    - name: Namespace 
+      kubernetes.core.k8s:
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: elk
+    - name: ElasticSearch 
+      kubernetes.core.k8s:
+        definition: "{{ lookup('template', 'elasticsearch/elasticsearch.yaml') }}"
+    - name: Kibana 
+      kubernetes.core.k8s:
+        definition: "{{ lookup('template', 'kibana/kibana.yaml') }}"
+    - name: Elastic Helm Repo
+      kubernetes.core.helm_repository:
+        name: elastic
+        repo_url: "https://helm.elastic.co"
+    - name: logstash Helm Chart
+      kubernetes.core.helm:
+        name: my-logstash
+        chart_ref: elastic/logstash
+        chart_version: 8.5.1
+        release_namespace: elk
+        values_files: 
+          -  ./logstash/values.yaml 
+    - name: logstash Helm Chart
+      kubernetes.core.helm:
+        name: my-filebeat
+        chart_ref: elastic/filebeat
+        chart_version: 8.5.1
+        release_namespace: elk
+        values_files: 
+          -  ./filebeat/values.yaml 

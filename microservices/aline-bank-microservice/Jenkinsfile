@@ -1,0 +1,158 @@
+def build_version = '0'
+def sonarqube_url = "None"
+def failed_stage = "None"
+pipeline {
+	agent any
+		tools {
+			maven 'M3'
+				'org.jenkinsci.plugins.docker.commons.tools.DockerTool' 'docker-20.10.12'
+		}
+	environment {
+			service_type="bank"
+			app_port=80
+			AWS_REGION = "us-east-1"
+	}
+	parameters {
+		booleanParam(name: 'snykFailOnIssues', defaultValue: false, description: 'Fail pipeline if snyk finds issues')
+		string(name: 'snykSeverity', defaultValue: "_none_", description: 'The minimum severity to detect. Can be one of the following: low, medium, high, critical.')
+	}
+	stages{
+		stage('Git Variable setup') {
+	 		steps {
+				script {
+					scmVars = checkout scm
+					gitCommit = scmVars.GIT_COMMIT.take(8)
+					git_commit_tag = (scmVars.GIT_BRANCH + '.' + gitCommit).split('/').last()
+				}
+			}
+			post{
+				failure{
+					script{
+						failed_stage = "${STAGE_NAME}"
+					}
+				}
+			}
+		}
+		stage('Test'){
+			steps{
+				sh "mvn clean test"
+			}
+			post{
+				failure{
+					script{
+						failed_stage = "${STAGE_NAME}"
+					}
+				}
+			}
+		}
+		stage('SonarQube Analysis') {
+			steps {
+				withSonarQubeEnv(installationName = "SQ") {
+					sh "mvn clean verify sonar:sonar"
+					script {
+						sonarqube_url = "${SONAR_HOST_URL}"
+					}
+				}
+			}
+			post{
+				failure{
+					script{
+						failed_stage = "${STAGE_NAME}"
+					}
+				}
+			}
+		}
+		stage('Quality Gate'){
+			steps{
+				waitForQualityGate abortPipeline: true
+			}
+			post{
+				failure{
+					script{
+						failed_stage = "${STAGE_NAME}"
+					}
+				}
+			}
+		}
+		stage('Snyk Security') {
+			steps {
+				snykSecurity(
+					snykInstallation: 'snyk@latest',
+					snykTokenId: 'snyk',
+					failOnIssues: "${snykFailOnIssues}",
+					severity: "${snykSeverity}",
+					additionalArguments: '--maven-aggregate-project'
+				)				
+			}
+			post{
+				failure{
+					script{
+						failed_stage = "${STAGE_NAME}"
+					}
+				}
+			}
+		}
+		stage('Build Image'){
+			steps{
+				script{
+					build_version = sh script: 'mvn help:evaluate -Dexpression=project.version -q -DforceStdout', returnStdout: true
+						app = docker.build("ik-${service_type}-microservice:${build_version}", "--build-arg service_type=${service_type} --build-arg app_port=${app_port} .")
+
+				}
+			}
+			post{
+				failure{
+					script{
+						failed_stage = "${STAGE_NAME}"
+					}
+				}
+			}
+		}
+		stage('Push to ECR'){
+			steps{
+				script{
+					docker.withRegistry("https://239153380322.dkr.ecr.${AWS_REGION}.amazonaws.com/", "ecr:${AWS_REGION}:aws"){
+						app.push("${git_commit_tag}")
+							app.push("${git_commit_tag}")
+					}
+				}
+			}
+			post{
+				failure{
+					script{
+						failed_stage = "${STAGE_NAME}"
+					}
+				}
+			}
+		}
+		stage('Update Kubernetes'){
+			steps{
+				build job: 'ik-kubernetes-deployment'	
+			}
+			post{
+				failure{
+					script{
+						failed_stage = "${STAGE_NAME}"
+					}
+				}
+			}
+		}
+	}
+	post{
+		always{
+			build job: 'ik-send-email', parameters: [
+				string(name: 'microservice', value: "${service_type}"),
+				string(name: 'cur_build_number', value: "${BUILD_NUMBER}"),
+				string(name: 'cur_job_url', value: "${JOB_URL}"),
+				string(name: 'sonarqube_url', value: "${sonarqube_url}"),
+				string(name: 'cur_git_url', value: "${GIT_URL}"),
+				string(name: 'failure_stage', value: "${failed_stage}" ),
+				string(name: 'git_commit_tag', value: "${git_commit_tag}")
+			]
+
+			sh 'docker rmi -f $(docker images --filter reference="ik-${service_type}*" -q)'
+			sh 'docker rmi -f $(docker images -q -f dangling=true)'
+			cleanWs()
+		}
+	}
+}

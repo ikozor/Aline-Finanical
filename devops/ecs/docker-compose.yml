@@ -1,0 +1,245 @@
+version: '3.8'
+x-aws-vpc: ${AWS_VPC}
+services:
+  user:
+    labels:
+    - blue
+    - 0.1.0
+    image: ${AWS_ACC_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/ik-user-microservice:0.1.0
+    environment:
+      ENCRYPT_SECRET_KEY: ${ENCRYPT_SECRET_KEY}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      APP_PORT: ${USER_PORT}
+    ports:
+    - ${USER_PORT}:${USER_PORT}
+  account:
+    labels:
+    - blue
+    - 0.1.0
+    image: ${AWS_ACC_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/ik-account-microservice:0.2.0
+    environment:
+      ENCRYPT_SECRET_KEY: ${ENCRYPT_SECRET_KEY}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      APP_PORT: ${ACCOUNT_PORT}
+    ports:
+    - ${ACCOUNT_PORT}:${ACCOUNT_PORT}
+  bank:
+    labels:
+    - blue
+    - 0.1.0
+    image: ${AWS_ACC_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/ik-bank-microservice:0.1.0
+    environment:
+      ENCRYPT_SECRET_KEY: ${ENCRYPT_SECRET_KEY}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      APP_PORT: ${BANK_PORT}
+    ports:
+    - ${BANK_PORT}:${BANK_PORT}
+  card:
+    labels:
+    - blue
+    - 0.1.0
+    image: ${AWS_ACC_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/ik-card-microservice:0.1.0
+    environment:
+      ENCRYPT_SECRET_KEY: ${ENCRYPT_SECRET_KEY}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      APP_PORT: ${CARD_PORT}
+    ports:
+    - ${CARD_PORT}:${CARD_PORT}
+  transaction:
+    labels:
+    - blue
+    - 0.1.0
+    image: ${AWS_ACC_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/ik-transaction-microservice:0.1.0
+    environment:
+      ENCRYPT_SECRET_KEY: ${ENCRYPT_SECRET_KEY}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      APP_PORT: ${TRANSACTION_PORT}
+    ports:
+    - ${TRANSACTION_PORT}:${TRANSACTION_PORT}
+  underwriter:
+    labels:
+    - blue
+    - 0.1.0
+    image: ${AWS_ACC_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/ik-underwriter-microservice:0.1.0
+    environment:
+      ENCRYPT_SECRET_KEY: ${ENCRYPT_SECRET_KEY}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      APP_PORT: ${UNDERWRITER_PORT}
+    ports:
+    - ${UNDERWRITER_PORT}:${UNDERWRITER_PORT}
+x-aws-cloudformation:
+  Resources:
+    LoadBalancer:
+      Properties:
+        Subnets:
+        - ${AWS_SUBNET_1}
+        - ${AWS_SUBNET_2}
+        Type: application
+    UserTCP8170Listener:
+      Properties:
+        Protocol: HTTP
+        DefaultActions:
+        - ForwardConfig:
+            TargetGroups:
+            - Weight: 10
+              TargetGroupArn:
+                Ref: UserTCP8170TargetGroup
+          Type: forward
+    UnderwriterTCP8171Listener:
+      Properties:
+        Protocol: HTTP
+        DefaultActions:
+        - ForwardConfig:
+            TargetGroups:
+            - Weight: 10
+              TargetGroupArn:
+                Ref: UnderwriterTCP8171TargetGroup
+          Type: forward
+    CardTCP8172Listener:
+      Properties:
+        Protocol: HTTP
+        DefaultActions:
+        - ForwardConfig:
+            TargetGroups:
+            - Weight: 10
+              TargetGroupArn:
+                Ref: CardTCP8172TargetGroup
+          Type: forward
+    TransactionTCP8173Listener:
+      Properties:
+        Protocol: HTTP
+        DefaultActions:
+        - ForwardConfig:
+            TargetGroups:
+            - Weight: 10
+              TargetGroupArn:
+                Ref: TransactionTCP8173TargetGroup
+          Type: forward
+    BankTCP8174Listener:
+      Properties:
+        Protocol: HTTP
+        DefaultActions:
+        - ForwardConfig:
+            TargetGroups:
+            - Weight: 10
+              TargetGroupArn:
+                Ref: BankTCP8174TargetGroup
+          Type: forward
+    AccountTCP8175Listener:
+      Properties:
+        Protocol: HTTP
+        DefaultActions:
+        - ForwardConfig:
+            TargetGroups:
+            - Weight: 10
+              TargetGroupArn:
+                Ref: AccountTCP8175TargetGroup
+          Type: forward
+    UserTCP8170TargetGroup:
+      Properties:
+        Protocol: HTTP
+        HealthCheckIntervalSeconds: 60
+        UnhealthyThresholdCount: 5
+        HealthCheckPath: /health
+    UserService:
+      Properties:
+        NetworkConfiguration:
+          AwsvpcConfiguration:
+            Subnets:
+            - ${AWS_SUBNET_1}
+            - ${AWS_SUBNET_2}
+    AccountTCP8175TargetGroup:
+      Properties:
+        Protocol: HTTP
+        HealthCheckIntervalSeconds: 60
+        UnhealthyThresholdCount: 5
+        HealthCheckPath: /health
+    AccountService:
+      Properties:
+        NetworkConfiguration:
+          AwsvpcConfiguration:
+            Subnets:
+            - ${AWS_SUBNET_1}
+            - ${AWS_SUBNET_2}
+    BankTCP8174TargetGroup:
+      Properties:
+        Protocol: HTTP
+        HealthCheckIntervalSeconds: 60
+        UnhealthyThresholdCount: 5
+        HealthCheckPath: /health
+    BankService:
+      Properties:
+        NetworkConfiguration:
+          AwsvpcConfiguration:
+            Subnets:
+            - ${AWS_SUBNET_1}
+            - ${AWS_SUBNET_2}
+    CardTCP8172TargetGroup:
+      Properties:
+        Protocol: HTTP
+        HealthCheckIntervalSeconds: 60
+        UnhealthyThresholdCount: 5
+        HealthCheckPath: /health
+    CardService:
+      Properties:
+        NetworkConfiguration:
+          AwsvpcConfiguration:
+            Subnets:
+            - ${AWS_SUBNET_1}
+            - ${AWS_SUBNET_2}
+    TransactionTCP8173TargetGroup:
+      Properties:
+        Protocol: HTTP
+        HealthCheckIntervalSeconds: 60
+        UnhealthyThresholdCount: 5
+        HealthCheckPath: /health
+    TransactionService:
+      Properties:
+        NetworkConfiguration:
+          AwsvpcConfiguration:
+            Subnets:
+            - ${AWS_SUBNET_1}
+            - ${AWS_SUBNET_2}
+    UnderwriterTCP8171TargetGroup:
+      Properties:
+        Protocol: HTTP
+        HealthCheckIntervalSeconds: 60
+        UnhealthyThresholdCount: 5
+        HealthCheckPath: /health
+    UnderwriterService:
+      Properties:
+        NetworkConfiguration:
+          AwsvpcConfiguration:
+            Subnets:
+            - ${AWS_SUBNET_1}
+            - ${AWS_SUBNET_2}

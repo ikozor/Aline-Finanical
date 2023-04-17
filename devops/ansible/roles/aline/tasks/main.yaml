@@ -1,0 +1,32 @@
+---
+- name: Terraform
+  ansible.builtin.include_tasks: terraform.yaml
+- name: Apply Variables
+  ansible.builtin.include_vars: output.yaml
+- name: Update Kubeconfig
+  changed_when: false
+  ansible.builtin.shell: |
+    aws eks --region {{ aws_region }} update-kubeconfig --name {{ cluster_name }}
+- name: Create Namesace
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: microservices
+      labels:
+        - istio-injection: enabled
+- name: Autoscaling
+  ansible.builtin.include_tasks: autoscaling.yaml
+- name: Secrets
+  ansible.builtin.include_tasks: csi-secrets.yaml
+- name: Load Balancer
+  ansible.builtin.include_tasks: load-balancer.yaml
+- name: Istio
+  ansible.builtin.include_tasks: istio.yaml
+- name: Aline Financial
+  ansible.builtin.include_tasks: aline-financial.yaml
+- name: Delete Var File
+  ansible.builtin.file:
+    state: absent
+    path: ./output.yaml

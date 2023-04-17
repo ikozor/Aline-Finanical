@@ -1,0 +1,19 @@
+---
+- name: LoadBalancer Service Account
+  kubernetes.core.k8s:
+    definition: "{{ lookup('template', 'alb-service-account.yaml') }}"
+- name: Load Balancer Helm Repo
+  kubernetes.core.helm_repository:
+    name: eks-charts
+    repo_url: "https://aws.github.io/eks-charts"
+- name: Load Balancer Helm Chart
+  kubernetes.core.helm:
+    name: aws-load-balancer-controller
+    chart_ref: eks-charts/aws-load-balancer-controller
+    chart_version: 1.4.6
+    release_namespace: kube-system
+    values:
+      clusterName: "{{ eks_cluster_name }}"
+      serviceAccount:
+        create: false
+        name: aws-load-balancer-controller

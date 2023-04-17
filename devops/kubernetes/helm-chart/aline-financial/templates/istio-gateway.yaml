@@ -1,0 +1,52 @@
+{{- $root := . }}
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: aline-gateway
+spec:
+  selector: 
+    istio: ingressgateway
+  servers:
+    - hosts:
+      - "*"
+      port: 
+        number: 443
+        name: https-443
+        protocol: HTTPS
+      tls:
+        mode: SIMPLE
+        credentialName: "tls-secret"
+
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: aline-financial
+spec:
+  hosts:
+    - "eks.alinefinancial.cloud"
+  gateways:
+    - aline-gateway
+  http:
+    {{- range $index, $microservice := .Values.microservices }}
+    - match: 
+        {{- range $index, $value := $microservice.paths }}
+        - uri:
+            regex: {{ $value }}
+        {{- end }}
+      route:
+        - destination:
+            {{- $tag := $microservice.tag | replace "." "-" }}
+            host: {{ $microservice.name }}-{{ $tag }}
+            port: 
+              number: 80
+        {{- if and $microservice.green_tag $root.Values.green_weight $root.Values.weight }}
+          weight: {{ printf "%d" $root.Values.weight }}
+        - destination:
+            {{- $green_tag := $microservice.green_tag | replace "." "-" }}
+            host: {{ $microservice.name }}-{{ $green_tag }}
+            port: 
+              number: 80
+          weight: {{ printf "%d" $root.Values.green_weight }}
+        {{- end }}
+    {{- end }}

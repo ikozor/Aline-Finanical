@@ -1,0 +1,36 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: "api-gateway"
+
+app:
+  gateway:
+    service-host: "http://localhost"
+    path-prefix: "/api"
+    routes:
+      - id: "user"
+        port: 8070
+        paths:
+          - "@/users"
+          - "@/users/{segment}"
+          - "@/login"
+          - "/login"
+      - id: "underwriter"
+        port: 8071
+        paths:
+          - "@/applicants"
+          - "@/applications"
+          - "@/applicants/{segment}"
+          - "@/applications/{segment}"
+      - id: "account"
+        port: 8072
+        paths:
+          - "@/accounts"
+          - "@/accounts/{segment}"
+          - "@/members/{segment}/accounts"
+    portal-origins:
+      - "http://localhost:4200"
+      - "http://localhost:3007"
+      - "http://localhost:3000"

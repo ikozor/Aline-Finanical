@@ -1,0 +1,191 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: EKS cluster, VPC, and RDS with MySQL
+
+Metadata:
+  "AWS::CloudFormation::Interface":
+    ParameterGroups:
+      - Label:
+          default: EKS Cluster
+        Parameters:
+          - EKSClusterName
+          - EKSClusterSecurityGroup 
+      - Label:
+          default: Worker Node Configuration
+        Parameters:
+          - DesiredWorkerNodes 
+          - MinWorkerNodes 
+          - MaxWorkerNodes 
+          - WorkerNodesInstanceType 
+      - Label:
+          default: Worker Network Configuration
+        Parameters:
+          - VpcId
+          - Subnets
+      - Label:
+          default: RDS Database Configuration
+        Parameters:
+          - RDSSecurityGroup
+
+Mappings:
+  RegionMap:
+    us-east-1:
+      eksNodeAMI: ami-06c9b6a12f5bd0a96
+    us-east-2:
+      eksNodeAMI: ami-0af5eb518f7616978
+    us-west-1:
+      eksNodeAMI: ami-0d8857ce76f65c24d
+    us-west-2:
+      eksNodeAMI: ami-06bb00841fcd76aa4
+
+Parameters:
+  VpcId:
+    Type: "AWS::EC2::VPC::Id"
+    Description: The VPC of the worker instances
+  Subnets:
+    Type: "List<AWS::EC2::Subnet::Id>"
+    Description: The subnets where workers can be created.
+  DesiredWorkerNodes:
+    Type: Number
+    Description: The amount of worker nodes 
+    Default: 2
+  MinWorkerNodes:
+    Type: Number
+    Description: The amount of worker nodes 
+    Default: 1
+  MaxWorkerNodes:
+   Type: Number
+   Description: The amount of worker nodes 
+   Default: 4
+  WorkerNodesInstanceType:
+    Type: String
+    Description: Instance type for the worker nodes
+    Default: t2.medium
+    AllowedValues:
+      - t2.medium
+      - t3.medium
+    ConstraintDescription: Must be a valid EC2 instance type
+  EKSClusterSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup::Id"
+    Description: The security group of the cluster control plane.
+  RDSSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup::Id"
+    Description: The security group of the RDS.
+  EKSClusterName:
+    Type: String
+    Description: The cluster name provided when the cluster was created. If it is incorrect, nodes will not be able to join the cluster.
+
+Resources:
+  WorkerNodesSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for all the worker nodes
+      VpcId: !Ref VpcId 
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-WorkerNodesSecurityGroup'
+        - Key: !Sub "kubernetes.io/cluster/${EKSClusterName}" 
+          Value: owned
+  WorkerNodesingressFromWorkerNodes:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow all incoming traffic from other worker nodes
+      GroupId: !Ref WorkerNodesSecurityGroup
+      SourceSecurityGroupId: !Ref WorkerNodesSecurityGroup
+      IpProtocol: "-1"
+  WorkerNodesingressFromControlPlaneKubelet:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow incoming (TCP/10250) kubelet traffic from control plane 
+      GroupId: !Ref WorkerNodesSecurityGroup
+      SourceSecurityGroupId: !Ref EKSClusterSecurityGroup
+      IpProtocol: tcp 
+      FromPort: 10250
+      ToPort: 10250
+  WorkerNodesingressFromControlPlaneHttps:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow incoming (TCP/443) https traffic from control plane 
+      GroupId: !Ref WorkerNodesSecurityGroup
+      SourceSecurityGroupId: !Ref EKSClusterSecurityGroup
+      IpProtocol: tcp 
+      FromPort: 443 
+      ToPort: 443
+  WorkerNodesingressFromRDSMysql:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow incoming (TCP/3306) mysql traffic from RDS 
+      GroupId: !Ref WorkerNodesSecurityGroup
+      SourceSecurityGroupId: !Ref RDSSecurityGroup
+      IpProtocol: tcp 
+      FromPort: 3306
+      ToPort: 3306
+  WorkerNodesEgressToRDSMysql:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      Description: Allow outgoing (TCP/3306) mysql traffic to RDS 
+      GroupId: !Ref WorkerNodesSecurityGroup 
+      DestinationSecurityGroupId: !Ref RDSSecurityGroup
+      IpProtocol: tcp 
+      ToPort: 3306
+      FromPort: 3306
+ 
+  WorkerNodesAutoscalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: 1
+        MaxBatchSize: 1
+    Properties:
+      LaunchConfigurationName: !Ref WorkerNodesLaunchConfiguration 
+      MinSize: !Ref MinWorkerNodes
+      MaxSize: !Ref MaxWorkerNodes
+      DesiredCapacity: !Ref DesiredWorkerNodes
+      VPCZoneIdentifier: !Ref Subnets
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-WorkerNodesAutoscalingGroup'
+          PropagateAtLaunch: true
+        - Key: !Sub 'kubernetes.io/cluster/${EKSClusterName}'
+          Value: owned 
+          PropagateAtLaunch: true
+  WorkerNodesIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect: Allow
+          Principal: 
+            Service:
+              - ec2.amazonaws.com 
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+  WorkerNodeGroup:
+    Type: AWS::EKS::Nodegroup 
+    Properties:
+      ClusterName: !Ref EKSClusterName
+      NodeRole: !GetAtt WorkerNodesIAMRole.Arn
+      ScalingConfig:
+        MinSize: !Ref MinWorkerNodes
+        MaxSize: !Ref MaxWorkerNodes
+        DesiredSize: !Ref DesiredWorkerNodes
+      Subnets: !Ref Subnets
+  WorkerNodesLaunchConfiguration:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      AssociatePublicIpAddress: false
+      IamInstanceProfile: !Ref WorkerNodesInstanceProfile
+      ImageId: !FindInMap
+        - RegionMap
+        - !Ref AWS::Region
+        - eksNodeAMI 
+      InstanceType: !Ref WorkerNodesInstanceType
+  WorkerNodesInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref WorkerNodesIAMRole
+

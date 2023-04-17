@@ -1,0 +1,103 @@
+pipeline {
+	agent any
+	tools {
+		'terraform' 'Terraform'
+        //docker tool
+	}
+    parameters {
+        booleanParam(name: 'autoApprove', defaultValue: false, description: 'Automatically apply after plan')
+        booleanParam(name: 'installApplication', defaultValue: true, description: 'Install the aline financial application')
+    }
+	environment {
+		aws_creds = credentials('ik-aws-cred')
+		AWS_REGION = "us-east-2"
+        TF_IN_AUTOMATION = '1'
+        registry = "https://412032026508.dkr.ecr.us-east-1.amazonaws.com/"
+        registry_credentials = "ecr:us-east-1:ik-aws-cred"
+        install_app = "${params.installApplication}"
+	}
+	stages{
+        stage('Tflint'){
+            steps{
+                dir('terraform/resources'){
+	                sh "curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | sh"
+	                sh "tflint --init"
+	                sh "tflint"
+                }
+            }
+        }
+        stage('Terratest'){
+            steps{
+                dir('terraform'){
+	                script{
+		                docker.withRegistry(registry, registry_credentials){
+                            sh '''docker run \
+                            -v ${PWD}:/go/src/app/test \
+                            -e AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} -e AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
+                            -w /go/src/app/test --rm \
+                            412032026508.dkr.ecr.us-east-1.amazonaws.com/ik-terratest:0.1.0 sh init_test.sh'''
+                        }
+                    }
+                }
+            }
+        }
+        stage('pull secrets'){
+            steps{
+                dir('terraform/resources'){
+	                script{
+			            withCredentials([file(credentialsId: 'ik-k8-secrets', variable: 'secrets')]){
+			                writeFile file: 'misc/secrets.yaml', text: readFile(secrets)
+			            }
+	                }
+                }
+            }
+        }
+        stage('Start Terraform container'){
+            steps{
+                script {
+		            docker.withRegistry(registry, registry_credentials){
+	                    sh '''docker run -v ${PWD}:/apps \
+	                    -e AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} -e AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
+                        -e TF_VAR_install_application=${install_app} \
+	                    -t -d --name ik-terraform 412032026508.dkr.ecr.us-east-1.amazonaws.com/ik-k8/terraform:latest'''
+	                }
+                }
+            }
+        }
+        stage('terraform init'){
+            steps{
+                sh "docker exec ik-terraform terraform -chdir=terraform/resources init -reconfigure -input=false"
+            }
+        }
+		stage('terraform plan'){
+            steps{
+                sh "docker exec ik-terraform terraform -chdir=terraform/resources plan -out tfplan -input=false"
+                sh "docker exec ik-terraform terraform -chdir=terraform/resources show -no-color tfplan > tfplan.txt"
+            }    
+        }
+        stage('approve'){
+            when{
+                equals expected: false, actual: params.autoApprove
+            }
+            steps{
+                script{
+		            def plan_file = readFile 'tfplan.txt'
+		            input message: "Apply Plan?",
+		                parameters: [text(name: 'Plan', description: "Review plan", defaultValue: plan_file)]
+                }
+            }
+        }
+        stage('terraform apply'){
+            steps{
+                dir('terraform/resources/'){
+                    sh "docker exec ik-terraform terraform -chdir=terraform/resources apply -input=false tfplan"
+                }
+            }    
+        }
+	}
+    post{
+	    always{
+	        sh 'docker rm -f ik-terraform'
+	    }
+    }
+}

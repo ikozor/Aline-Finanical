@@ -1,0 +1,73 @@
+pipeline {
+	agent any
+	tools {
+		'org.jenkinsci.plugins.docker.commons.tools.DockerTool' 'docker-20.10.12'
+	}
+	environment {
+		aws_creds = credentials('ik-aws-cred')
+		AWS_REGION = "us-east-2"
+        registry = "https://412032026508.dkr.ecr.us-east-1.amazonaws.com/"
+        registry_credentials = "ecr:${AWS_REGION}:ik-aws-cred"
+
+        env_file_id = "6453e544-9d01-4fdc-bddd-3a3c1f183215"
+	}
+	stages{
+        stage('Prepare env'){
+            steps{
+                script{
+                    configFileProvider([configFile(fileId:"${env_file_id}", targetLocation: "${PWD}/workspace/ik-ecs")]){
+                        sh "cat ecs.env > ecs/.env"
+                    }
+                }
+            }
+        }
+		stage('Update Values'){
+			steps{	
+				dir('ecs/'){
+                    script {
+	                    docker.withRegistry(registry, registry_credentials){
+	                    sh '''docker run \
+		                    -v ${PWD}:/apps \
+		                    -e AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
+		                    -e AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
+		                    -e AWS_REGION=${AWS_REGION} \
+		                    --rm 412032026508.dkr.ecr.us-east-1.amazonaws.com/ik-python:0.1.0 python update_tags.py'''
+                        }
+                    }
+				}
+			}
+		}
+		stage('Create ECS context'){
+			steps{
+    				sh '''
+                    aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 412032026508.dkr.ecr.us-east-1.amazonaws.com
+    				curl -L https://github.com/docker/compose-cli/releases/download/v1.0.29/docker-linux-amd64 -o docker-linux-amd64
+    				sudo mv docker-linux-amd64 docker
+    				sudo chmod +x docker
+    			    mv docker $(which docker)
+    				docker context create ecs ik-ecs-context --from-env
+                    docker context use ik-ecs-context
+                    '''
+			}
+		}
+        stage('Compose Up'){
+            steps{
+                dir('ecs/'){
+                    catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE'){
+                        sh 'docker compose -p ik-aline-ecs up'
+                    }
+                }
+            }
+        }
+        stage('Remove context'){
+            steps{
+                sh '''
+                docker context use default
+                docker context rm ik-ecs-context
+                '''
+            }
+        }
+	}
+}
+
+

@@ -1,0 +1,12 @@
+
+README.md
+
+.gitmodules
+
+.gitignore
+
+*/test/
+
+pyscripts/
+
+.git/

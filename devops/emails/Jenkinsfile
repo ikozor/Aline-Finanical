@@ -1,0 +1,49 @@
+pipeline {
+  agent any
+  tools {
+    'org.jenkinsci.plugins.docker.commons.tools.DockerTool' 'docker-20.10.12'
+  }
+  parameters {
+    string(name: 'microservice', defaultValue: '', description: 'what microservice caused the ci')
+    string(name: 'cur_build_number', defaultValue: '', description: 'build number')
+    string(name: 'git_commit_tag', defaultValue: '', description: 'commit tag')
+    string(name: 'cur_job_url', defaultValue: '', description: 'url for the job')
+    string(name: 'sonarqube_url', defaultValue: '', description: 'url for the sonarqube analysis')
+    string(name: 'cur_git_url', defaultValue: '', description: 'git url for commit that caused build')
+    string(name: 'failure_stage', defaultValue: '', description: 'what stage the build failed at')
+    string(name: 'from_email', defaultValue: 'ilyakozorezov@gmail.com', description: 'email to send report from')
+    string(name: 'to_emails', defaultValue: 'ilyakozor@gmail.com', description: 'emails to send report to')
+
+  }
+  environment {
+    aws_creds = credentials('aws')
+    AWS_REGION = "us-east-1"
+    registry = "239153380322.dkr.ecr.${AWS_REGION}.amazonaws.com/"
+    registry_credentials = "ecr:${AWS_REGION}:aws"
+  }
+  stages{
+    stage('Send Email'){
+      steps{
+        script{
+          docker.withRegistry("https://${registry}", registry_credentials){
+            sh '''docker run \
+              -v ${PWD}:/apps \
+              -e AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
+              -e AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
+              -e AWS_REGION=${AWS_REGION} \
+              -e microservice=${microservice} \
+              -e build_number=${cur_build_number} \
+              -e git_commit=${git_commit_tag} \
+              -e job_url=${cur_job_url} \
+              -e sonarqube_url=${sonarqube_url} \
+              -e git_url=${cur_git_url} \
+              -e failure_stage="${failure_stage}"\
+              -e from_email="${from_email}"\
+              -e to_emails="${to_emails}"\
+              --rm ${registry}ik-python:0.1.0 python emails/send_emails.py'''
+          }
+        } 
+      }
+    }
+  }
+}

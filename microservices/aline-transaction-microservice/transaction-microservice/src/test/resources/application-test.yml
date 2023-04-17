@@ -1,0 +1,28 @@
+# Test properties
+
+server:
+  port: 8080
+
+spring:
+  application:
+    name: "test-microservice"
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: "org.hibernate.dialect.H2Dialect"
+    show-sql: true
+  datasource:
+    username: "sa"
+    password: ""
+    url: "jdbc:h2:mem:testdb;MODE=MySQL"
+    driver-class-name: org.h2.Driver
+    initialization-mode: embedded
+  jackson:
+    serialization:
+      INDENT_OUTPUT: true
+
+app:
+  security:
+    secret-key: "ThisIsAGreatSecretKey!!!"
+    jwt:
+      secret-key: "ThisIsAJWTSecretKeyForAuthentication"

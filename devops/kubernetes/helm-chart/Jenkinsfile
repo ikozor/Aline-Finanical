@@ -1,0 +1,34 @@
+pipeline {
+	agent any
+	tools {
+		'org.jenkinsci.plugins.docker.commons.tools.DockerTool' 'docker-20.10.12'
+	}
+	environment {
+		aws_creds = credentials('ik-aws-cred')
+		AWS_REGION = "us-east-2"
+		AWS_ECR_REGION = "us-east-1"
+		registry = "https://412032026508.dkr.ecr.${AWS_ECR_REGION}.amazonaws.com/"
+    registry_credentials = "ecr:${AWS_ECR_REGION}:ik-aws-cred"
+	}
+	stages{
+		stage('Update Values'){
+			steps{	
+				dir('kubernetes/helm-chart/'){
+				sh '''docker run \
+						-v ${PWD}:/apps \
+						-e AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} \
+						-e AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} \
+						-e AWS_ECR_REGION=${AWS_ECR_REGION} \
+						--rm 412032026508.dkr.ecr.us-east-1.amazonaws.com/ik-python:0.1.0 python update_values.py'''
+				}
+			}
+		}
+		stage('Upgrade Helm'){
+			steps{
+				dir('kubernetes/helm-chart/'){
+					sh 'docker run -v ${PWD}:/apps -e AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} -e AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY} alpine/k8s:1.23.14 bash upgrade_helm.sh'
+				}
+			}
+		}
+	}
+}

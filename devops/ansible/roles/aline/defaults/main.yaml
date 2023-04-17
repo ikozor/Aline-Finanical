@@ -1,0 +1,9 @@
+aws_region: us-east-1
+
+terraform_project_dir: ../terraform/resources
+terraform_variables_file: "terraform.tfvars"
+terraform_backend_config: "tf_backend"
+terraform_workspace: default
+
+base_url: alinefinancial.cloud
+subdomain: eks

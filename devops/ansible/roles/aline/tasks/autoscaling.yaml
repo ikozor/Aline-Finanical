@@ -1,0 +1,10 @@
+---
+- name: Create Autoscaler Service Account
+  kubernetes.core.k8s:
+    definition: "{{ lookup('template', 'autoscale-service-account.yaml') }}"
+- name: Autoscaling Roles
+  kubernetes.core.k8s:
+    definition: "{{ lookup('template', 'autoscale-role.yaml') }}"
+- name: Autoscaling Deployment
+  kubernetes.core.k8s:
+    definition: "{{ lookup('template', 'autoscale-deployment.yaml') }}"

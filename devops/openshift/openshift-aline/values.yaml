@@ -1,0 +1,45 @@
+microservices:
+- name: ik-account-microservice
+  tag: 0.1.0
+  imagelocation: 239153380322.dkr.ecr.us-east-1.amazonaws.com/
+  replicas: 1
+  paths:
+  - /accounts.*
+  - /members/[^/]+/accounts
+- name: ik-bank-microservice
+  tag: 0.1.0
+  imagelocation: 239153380322.dkr.ecr.us-east-1.amazonaws.com/
+  replicas: 1
+  paths:
+  - /banks.*
+  - /branches.*
+  - /members.*
+- name: ik-transaction-microservice
+  tag: 0.1.0
+  imagelocation: 239153380322.dkr.ecr.us-east-1.amazonaws.com/
+  replicas: 1
+  paths:
+  - /transactions.*
+  - /members/[^/]+/transactions
+  - /accounts/[^/]+/transactions
+  - /accounts/[^/]+/[^/]+/transactions
+- name: ik-card-microservice
+  tag: 0.1.0
+  imagelocation: 239153380322.dkr.ecr.us-east-1.amazonaws.com/
+  replicas: 1
+  paths:
+  - /cards.*
+- name: ik-underwriter-microservice
+  tag: 0.1.0
+  imagelocation: 239153380322.dkr.ecr.us-east-1.amazonaws.com/
+  replicas: 1
+  paths:
+  - /applicants.*
+  - /applications.*
+- name: ik-user-microservice
+  tag: 0.1.0
+  imagelocation: 239153380322.dkr.ecr.us-east-1.amazonaws.com/
+  replicas: 1
+  paths:
+  - /users.*
+  - /login.*

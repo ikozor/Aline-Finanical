@@ -1,0 +1,97 @@
+version: "3.8"
+
+x-common-env-variables: &common-env-variables
+  ENCRYPT_SECRET_KEY: "${ENCRYPT_SECRET_KEY}"
+  JWT_SECRET_KEY: "${JWT_SECRET_KEY}"
+  DB_USERNAME: "${DB_USERNAME}"
+  DB_PASSWORD: "${DB_PASSWORD}"
+  DB_HOST: "${DB_HOST}"
+  DB_PORT: ${DB_PORT} 
+  DB_NAME: "${DB_NAME}"
+
+services:
+  user:
+    image: ik-user-microservice
+    build: 
+      context: ../../${DIRECTORY_NAME}/aline-user-microservice
+      args:
+        service_type: user
+    environment: 
+      <<: *common-env-variables
+      APP_PORT: ${USER_PORT}
+    ports:
+      - ${USER_PORT}:${USER_PORT}
+  underwriter:
+    image: ik-underwriter-microservice 
+    build: 
+      context: ../../${DIRECTORY_NAME}/aline-underwriter-microservice
+      args:
+        APP_PORT: ${UNDERWRITER_PORT} 
+        service_type: underwriter
+    environment: 
+      <<: *common-env-variables
+      APP_PORT: ${UNDERWRITER_PORT} 
+    ports:
+      - ${UNDERWRITER_PORT}:${UNDERWRITER_PORT}
+  card:
+    image: ik-card-microservice 
+    build: 
+      context: ../../${DIRECTORY_NAME}/aline-card-microservice
+      args:
+        service_type: card
+    environment: 
+      <<: *common-env-variables
+      APP_PORT: ${CARD_PORT} 
+    ports:
+      - ${CARD_PORT}:${CARD_PORT}
+  transaction:
+    image: ik-transaction-microservice 
+    build: 
+      context: ../../${DIRECTORY_NAME}/aline-transaction-microservice
+      args:
+        service_type: transaction 
+    environment: 
+      <<: *common-env-variables
+      APP_PORT: ${TRANSACTION_PORT} 
+    ports:
+      - ${TRANSACTION_PORT}:${TRANSACTION_PORT}
+  bank:
+    image: ik-bank-microservice 
+    build: 
+      context: ../../${DIRECTORY_NAME}/aline-bank-microservice
+      args:
+        service_type: bank 
+    environment: 
+      <<: *common-env-variables
+      APP_PORT: ${BANK_PORT} 
+    ports:
+      - ${BANK_PORT}:${BANK_PORT}
+  account:
+    image: ik-account-microservice 
+    build: 
+      context: ../../${DIRECTORY_NAME}/aline-account-microservice
+      args:
+        service_type: account 
+    environment: 
+      <<: *common-env-variables
+      APP_PORT: ${ACCOUNT_PORT} 
+    ports:
+      - ${ACCOUNT_PORT}:${ACCOUNT_PORT}
+  gateway:
+    image: ik-gateway 
+    build:
+      context: ../../${DIRECTORY_NAME}/aline-gateway
+    environment:
+      APP_SERVICE_HOST: "${LOCAL_IP}"
+      USER_PORT: ${USER_PORT} 
+      UNDERWRITER_PORT: ${UNDERWRITER_PORT}
+      CARD_PORT: ${CARD_PORT}
+      TRANSACTION_PORT: ${TRANSACTION_PORT}
+      BANK_PORT: ${BANK_PORT}
+      ACCOUNT_PORT: ${ACCOUNT_PORT}
+      APP_PORT: ${GATEWAY_PORT} 
+      PORTAL_LANDING: 'http://localhost:3000'
+      PORTAL_DASHBOARD: 'http://localhost:3001'
+      PORTAL_ADMIN: 'http://localhost:3002'
+    ports:
+      - ${GATEWAY_PORT}:${GATEWAY_PORT}

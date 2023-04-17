@@ -1,0 +1,97 @@
+{{- range $index, $microservice := .Values.microservices}}
+
+{{- $tag := $microservice.tag | replace "." "-" }}
+{{- $name := printf "%s-%s" $microservice.name $tag }}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    app: {{ $name }}
+spec:
+  replicas: {{ $microservice.replicas }} 
+  selector:
+    matchLabels:
+      app: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}
+    spec:
+      containers:
+      - name: {{ $name }}
+        image: {{ $microservice.imagelocation }}{{ $microservice.name }}:{{ $microservice.tag }}
+        ports:
+          - containerPort: 8080
+        env:
+          - name: service_type
+            value: {{ $microservice.name }}  
+          - name: ENCRYPT_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: aline-secrets
+                key: encryptsecretkey 
+          - name: JWT_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: aline-secrets
+                key: jwtsecretkey 
+          - name: DB_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: aline-secrets
+                key: dbusername 
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: aline-secrets
+                key: dbpassword 
+          - name: DB_HOST
+            valueFrom: 
+              secretKeyRef: 
+                name: aline-secrets
+                key: dbhost 
+          - name: DB_PORT
+            valueFrom:
+              secretKeyRef:
+                name: aline-secrets
+                key: dbport
+          - name: DB_NAME
+            valueFrom: 
+              secretKeyRef:
+                name: aline-secrets
+                key: dbname 
+          - name: APP_PORT
+            value: '8080'
+      imagePullSecrets:
+        - name: regcred
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }} 
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ $name }}
+  ports:
+    - protocol: TCP 
+      name: 8080-tcp
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  labels:
+  name: {{ $name }}-route
+spec:
+  port:
+    targetPort: 8080-tcp
+  to:
+    kind: Service
+    name: {{ $name }}
+---
+{{- end }}
+  

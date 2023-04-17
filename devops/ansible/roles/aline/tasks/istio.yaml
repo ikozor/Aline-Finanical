@@ -1,0 +1,52 @@
+---
+- name: Install istio
+  changed_when: false
+  ansible.builtin.shell: |
+    istioctl install -y \
+    --set profile=demo \
+    --set values.gateways.istio-ingressgateway.type=NodePort
+- name: Label Microservices
+  changed_when: false
+  ansible.builtin.shell: |
+    kubectl label namespace microservices istio-injection=enabled --overwrite
+- name: Create TLS Secret
+  changed_when: false
+  ansible.builtin.shell: |
+    openssl req -x509 -newkey rsa:4096 -sha256 -days 3650 -nodes \
+    -keyout key.pem -out cert.pem -subj "/CN={{ subdomain }}.{{ base_url }}"
+    kubectl create -n istio-system secret generic tls-secret \
+    --from-file=key=key.pem \
+    --from-file=cert=cert.pem
+    rm *.pem
+- name: Create ALB
+  kubernetes.core.helm:
+    name: alb-istio-ingress
+    chart_ref: ../kubernetes/helm-chart/istio-ingress
+    release_namespace: default
+    values:
+      host: "{{ subdomain }}.{{ base_url }}"
+      certificate_arn: "{{ alb_certificate_arn }}"
+- name: Create Elb Vars
+  changed_when: false
+  ansible.builtin.shell: |
+    export alb_domain=$(kubectl get ingress gw-ingress -n istio-system -o jsonpath="{.status.loadBalancer.ingress[*].hostname}")
+    export alb_name=$(alb_domain | cut -d'.' -f1)
+    export alb_zone_id=$(aws elbv2 describe-load-balancers --names $alb_name --query 'LoadBalancers[].CanonicalHostedZoneId' --output text)
+    echo "alb_domain: $alb_domain" > alb_info.yaml
+    echo "alb_zone_id: $alb_zone_id" >> alb_info.yaml
+- name: Apply Variables
+  ansible.builtin.include_vars: alb_info.yaml
+- name: Create Record
+  amazon.aws.route53:
+    state: present
+    overwrite: true
+    zone: "{{ base_url }}"
+    record: "{{ subdomain }}.{{ base_url }}"
+    type: A
+    value: "{{ alb_domain }}"
+    alias: true
+    alias_hosted_zone_id: "{{ alb_zone_id }}"
+- name: Delete ALB Var File
+  ansible.builtin.file:
+    state: absent
+    path: ./alb_info.yaml

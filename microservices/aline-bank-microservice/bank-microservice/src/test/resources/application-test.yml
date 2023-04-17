@@ -1,0 +1,29 @@
+server:
+  port: 8183
+
+spring:
+  application:
+    name: "bank-microservice"
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: "org.hibernate.dialect.H2Dialect"
+#    show-sql: true
+  datasource:
+    username: "sa"
+    password: ""
+    url: "jdbc:h2:mem:testdb;MODE=MYSQL"
+    driver-class-name: org.h2.Driver
+  jackson:
+    serialization:
+      INDENT_OUTPUT: true
+
+app:
+  sms:
+    enable: false
+  email:
+    enable: false
+  security:
+    secret-key: "ThisIsAGreatSecretKey!!!"
+    jwt:
+      secret-key: "ThisIsAGreatJWTSecretKeyThatWeNeedToUseForLoginStuffForOurSecurityAndStuff"

@@ -1,0 +1,4 @@
+kubectl apply -f elasticsearch/elasticsearch.yaml
+kubectl apply -f kibana/kibana.yaml
+helm install my-logstash elastic/logstash --version 8.5.1 -f logstash/values.yaml
+helm install my-filebeat elastic/filebeat --version 8.5.1 -f filebeat/values.yaml

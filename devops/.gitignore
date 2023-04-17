@@ -1,0 +1,6 @@
+.env
+*/.env
+secrets.yaml
+.terraform*
+go.*
+__pycache__

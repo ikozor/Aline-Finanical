@@ -1,0 +1,18 @@
+services:
+  user:
+    image: ${DIRECTORY_NAME}-account
+    build: 
+      context: . 
+      args:
+        service_type: underwriter
+    environment:
+      ENCRYPT_SECRET_KEY: "${ENCRYPT_SECRET_KEY}"
+      JWT_SECRET_KEY: "${JWT_SECRET_KEY}"
+      DB_USERNAME: "${DB_USERNAME}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      DB_HOST: "${DB_HOST}"
+      DB_PORT: ${DB_PORT} 
+      DB_NAME: "${DB_NAME}"
+      APP_PORT: ${UNDERWRITER_PORT}
+    ports:
+      - ${UNDERWRITER_PORT}:${UNDERWRITER_PORT}

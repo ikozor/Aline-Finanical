@@ -1,0 +1,23 @@
+ 
+ Set up EC2 t2.large instance and install docker on them
+
+ Start docker container with jfrog using 
+    docker run --name artifactory -d -p 8081:8081 -p 8082:8082 docker.bintray.io/jfrog/artifactory-pro:latest
+
+Do setup steps
+
+Create repos for docker images of all microservices
+
+
+Do 
+    export JFROG_REGISTRY=<ec2-instance-ip>:8082
+
+Do 
+    docker login ${JFROG_REGISTRY}
+
+run bash script
+    bash ./push_all.sh
+
+
+to pull an image, do 
+    docker pull ${JFROG_REGISTRY}/repo/image:tag

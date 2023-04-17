@@ -1,0 +1,20 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  name: ${cluster_name} 
+  region: us-west-2 
+  version: "1.23"
+  tags:
+    - creator: 'Ilya Kozorezov'
+    - project: 'Aline Financial Microservices'
+availabilityZones:
+  - us-west-2a
+  - us-west-2b
+managedNodeGroups:
+- name: ${node_group_name} 
+  privateNetworking: true
+  instanceType: ${instance_type}
+  desiredCapacity: ${desired_node_capacity}
+  minSize: ${min_nodes}
+  maxSize: ${max_nodes}
+  spot: true

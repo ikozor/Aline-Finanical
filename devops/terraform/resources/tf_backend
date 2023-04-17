@@ -1,0 +1,3 @@
+bucket = "ik-aline-terraform"
+region = "us-east-1"
+key = "ik-aline-financial.tfstate"

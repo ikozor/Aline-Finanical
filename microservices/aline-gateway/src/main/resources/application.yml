@@ -1,0 +1,61 @@
+server:
+  port: ${APP_PORT}
+
+spring:
+  application:
+    name: "api-gateway"
+  cloud:
+    gateway:
+      httpclient:
+        ssl:
+          use-insecure-trust-manager: true
+
+app:
+  gateway:
+    service-host: "http://${APP_SERVICE_HOST}"
+    path-prefix: "/api"
+    routes:
+      - id: "user"
+        port: ${USER_PORT}
+        paths:
+          - "@/users"
+          - "@/users/{segment}"
+          - "@/users/{segment}/profile"
+          - "@/users/{segment}/avatar"
+          - "@/login"
+          - "/login"
+      - id: "underwriter"
+        port: ${UNDERWRITER_PORT}
+        paths:
+          - "@/applicants"
+          - "@/applications"
+          - "@/applicants/{segment}"
+          - "@/applications/{segment}"
+      - id: "account"
+        port: ${ACCOUNT_PORT}
+        paths:
+          - "@/accounts"
+          - "@/accounts/{segment}"
+          - "@/members/{segment}/accounts"
+      - id: "bank"
+        port: ${BANK_PORT}
+        paths:
+          - "@/members"
+          - "@/members/{segment}"
+          - "@/branches"
+          - "@/banks"
+          - "@/banks/routing"
+          - "@/banks/routing/{segment}"
+          - "@/banks/id"
+          - "@/banks/id/{segment}"
+      - id: "transaction"
+        port: ${TRANSACTION_PORT} 
+        paths:
+          - "@/transactions"
+          - "@/transactions/{segment}"
+          - "@/members/{segment}/transactions"
+          - "@/accounts/{segment}/transactions"
+    portal-origins:
+      - "${PORTAL_LANDING}"
+        #- "${PORTAL_DASHBOARD}"
+      #- "${PORTAL_ADMIN}"

@@ -1,0 +1,16 @@
+---
+- name: Aline Financial With Values
+  kubernetes.core.helm:
+    name: aline-financial
+    chart_ref: ../kubernetes/helm-chart/aline-financial
+    release_namespace: microservices
+    values_files:
+      - "{{ aline_value_file }}"
+  when: aline_value_file is defined
+
+- name: Aline Financial
+  kubernetes.core.helm:
+    name: aline-financial
+    chart_ref: ../kubernetes/helm-chart/aline-financial
+    release_namespace: microservices
+  when: aline_value_file is undefined

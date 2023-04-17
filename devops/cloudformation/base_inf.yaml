@@ -1,0 +1,388 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: EKS cluster, VPC, and RDS with MySQL
+
+Metadata:
+  AWS::CloudFormation::Interface: 
+    ParameterGroups:
+      - Label: 
+          default: "Environment"
+        Parameters: 
+          - Environment
+
+      -  Label: 
+          default: "RDS Database"
+         Parameters:
+          - RDSAllocatedStorage
+          - RDSMaxAllocatedStorage
+          - DBInstanceClass
+          - DBName
+          - DBUsername
+          - DBPassword
+
+ 
+  
+Parameters:
+
+# Stack Parameters
+  Environment:
+    Type: String
+    Description: The Environment the resources are being deployed for 
+    Default: Testing
+    AllowedValues:
+      - Production
+      - Testing
+    ConstraintDescription: Must specify Production or Testing
+
+    #Param for acceptable regions
+    # Type List<AWS::Region>
+
+#RDS Parameters
+  RDSAllocatedStorage:
+    Type: Number
+    Description: Storage in Gbi to be allocated for the rds
+    Default: 20
+  RDSMaxAllocatedStorage:
+    Type: Number
+    Description: Max storage in Gbi to be allocated for the rds
+    Default: 20
+  DBInstanceClass:
+    Type: String
+    Description: Instance class for rds db
+    Default: db.t3.small
+  DBName:
+    Type: String
+    Description: Name of the database
+    Default: aline
+  DBUsername:
+    Type: String
+    Description: Username to access the database
+    NoEcho: true
+  DBPassword:
+    Type: String
+    Description: Password to access the database 
+    NoEcho: true
+
+Mappings:
+  VpcIpRanges:
+    Production:
+      VPCCidr: 10.0.0.0/16
+      PrivateSubnet1Cidr: 10.0.0.0/19
+      PrivateSubnet2Cidr: 10.0.32.0/19
+      PublicSubnet1Cidr: 10.0.64.0/19
+      PublicSubnet2Cidr: 10.0.96.0/19
+      DatabaseSubnet1Cidr: 10.0.128.0/19
+      DatabaseSubnet2Cidr: 10.0.160.0/19
+    Testing:
+      VPCCidr: 10.0.0.0/20
+      PrivateSubnet1Cidr: 10.0.0.0/23
+      PrivateSubnet2Cidr: 10.0.2.0/23
+      PublicSubnet1Cidr: 10.0.4.0/23
+      PublicSubnet2Cidr: 10.0.6.0/23
+      DatabaseSubnet1Cidr: 10.0.8.0/23
+      DatabaseSubnet2Cidr: 10.0.10.0/23
+
+Conditions:
+  InvalidRegion: !And 
+    - Fn::Not:
+      - !Equals
+        - !Ref AWS::Region 
+        - us-east-1
+    - Fn::Not:
+      - !Equals
+        - !Ref AWS::Region 
+        - us-east-2
+    - Fn::Not:
+      - !Equals
+        - !Ref AWS::Region 
+        - us-west-1
+    - Fn::Not:
+      - !Equals
+        - !Ref AWS::Region 
+        - us-west-2
+
+Resources:
+#============================================================================#
+# Test Regions                                                               #
+#============================================================================#
+  WaitConditionHandle:
+    Type: AWS::CloudFormation::WaitConditionHandle
+    Properties: {}
+  FailDueToWrongRegion:
+    Type: AWS::CloudFormation::WaitCondition
+    Condition: InvalidRegion 
+    Properties:
+      Handle: !Ref WaitConditionHandle
+      Timeout: '1'
+#============================================================================#
+#  VPC                                                                       #
+#============================================================================#
+  VPC:
+    Type: AWS::EC2::VPC 
+    Properties:
+      CidrBlock:  !FindInMap [VpcIpRanges, !Ref Environment, VPCCidr] 
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-VPC'
+
+#Subnets
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC 
+      CidrBlock:  !FindInMap [VpcIpRanges, !Ref Environment, PrivateSubnet1Cidr] 
+      AvailabilityZone: 
+        Fn::Select:
+          - '0'
+          - Fn::GetAZs: !Ref AWS::Region
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-PrivateSubnet1'
+        - Key: kubernetes.io/role/internal-elb
+          Value: 1
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC 
+      CidrBlock:  !FindInMap [VpcIpRanges, !Ref Environment, PrivateSubnet2Cidr] 
+      AvailabilityZone:  
+        Fn::Select:
+          - '1'
+          - Fn::GetAZs: !Ref AWS::Region
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-PrivateSubnet2'
+        - Key: kubernetes.io/role/internal-elb
+          Value: 1
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC 
+      CidrBlock:  !FindInMap [VpcIpRanges, !Ref Environment, PublicSubnet1Cidr] 
+      AvailabilityZone:  
+        Fn::Select:
+          - '0'
+          - Fn::GetAZs: !Ref AWS::Region
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-PublicSubnet1'
+        - Key: kubernetes.io/role/elb
+          Value: 1
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC 
+      CidrBlock:  !FindInMap [VpcIpRanges, !Ref Environment, PublicSubnet2Cidr] 
+      AvailabilityZone:  
+        Fn::Select:
+          - '1'
+          - Fn::GetAZs: !Ref AWS::Region
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-PublicSubnet2'
+        - Key: kubernetes.io/role/elb
+          Value: 1
+  DatabaseSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC 
+      CidrBlock:  !FindInMap [VpcIpRanges, !Ref Environment, DatabaseSubnet1Cidr] 
+      AvailabilityZone:  
+        Fn::Select:
+          - '0'
+          - Fn::GetAZs: !Ref AWS::Region
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-DatabaseSubnet1'
+  DatabaseSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC 
+      CidrBlock:  !FindInMap [VpcIpRanges, !Ref Environment, DatabaseSubnet2Cidr] 
+      AvailabilityZone:  
+        Fn::Select:
+          - '1'
+          - Fn::GetAZs: !Ref AWS::Region
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-DatabaseSubnet2'
+
+# Public Route
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-IGW'
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable 
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-PublicRouteTable'
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  NatGatewayEIP:
+    Type: AWS::EC2::EIP
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      Domain: vpc 
+  NatGateway:
+    Type: AWS::EC2::NatGateway 
+    Properties:
+      AllocationId: !GetAtt NatGatewayEIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation 
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation 
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+      
+# Private Routes
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable 
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-PrivateRouteTable'
+        - Key: Network 
+          Value: Private
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway 
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation 
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation 
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+  DatabaseSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation 
+    Properties:
+      SubnetId: !Ref DatabaseSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+  DatabaseSubnet21RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation 
+    Properties:
+      SubnetId: !Ref DatabaseSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+ 
+
+#============================================================================#
+#  EKS Cluster                                                               #
+#============================================================================#
+  EKSClusterSecurityGroup:
+    Type: AWS::EC2::SecurityGroup 
+    Properties:
+      GroupDescription: Security group fro the network between controle plane and worker nodes
+      VpcId: !Ref VPC 
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-EKSClusterSecurityGroup'
+  EKSClusterRole:
+    Type: AWS::IAM::Role 
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect: Allow 
+          Principal:
+            Service:
+              - eks.amazonaws.com 
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+        - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
+  EKSCluster:
+    Type: AWS::EKS::Cluster
+    Properties:
+      Name: !Ref AWS::StackName
+      Version: "1.23"
+      RoleArn: !GetAtt EKSClusterRole.Arn
+      ResourcesVpcConfig:
+        SecurityGroupIds:
+          - !Ref EKSClusterSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+          - !Ref PublicSubnet1
+          - !Ref PublicSubnet2
+
+#============================================================================#
+#  RDS Database                                                              #
+#============================================================================#
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup 
+    Properties:
+      GroupDescription: Security group for worker nodes interaction with rds 
+      VpcId: !Ref VPC 
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-RDSSecurityGroup'
+  DatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for RDS
+      SubnetIds:
+        - !Ref DatabaseSubnet1
+        - !Ref DatabaseSubnet2
+      Tags:
+        - Key: Name 
+          Value: !Sub '${AWS::StackName}-DBSubnetGroup'
+  DatabaseInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage: !Ref RDSAllocatedStorage
+      MaxAllocatedStorage: !Ref RDSMaxAllocatedStorage
+      AvailabilityZone:  
+        Fn::Select:
+          - '0'
+          - Fn::GetAZs: !Ref AWS::Region
+      DBInstanceClass: !Ref DBInstanceClass
+      DBInstanceIdentifier: !Sub '${AWS::StackName}-RDS'
+      DBName: !Ref DBName
+      DBSubnetGroupName: !Ref DatabaseSubnetGroup
+      Engine: MySQL
+      EngineVersion: 8.0.28
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+
+
+Outputs:
+  SubnetIds:
+    Description: Subnets IDs in the VPC
+    Value: !Join [ ",", [ !Ref PublicSubnet1, !Ref PublicSubnet2, !Ref PrivateSubnet1, !Ref PrivateSubnet2 ] ]
+  SecurityGroups:
+    Description: Security group for the cluster control plane communication with worker nodes
+    Value: !Join [ ",", [ !Ref EKSClusterSecurityGroup, !Ref RDSSecurityGroup ] ]  
+  VpcId:
+    Description: The VPC Id
+    Value: !Ref VPC
